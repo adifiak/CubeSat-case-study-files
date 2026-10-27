@@ -1,0 +1,89 @@
+constraints
+	// ================= greybox-internal dependencies =================
+	// ModularEps: PCDU MPPT rating vs. array peak power; battery string vs. charge regulator
+	WingPanels2x6U | TrackingWings2x6U => PcduHighPower
+	Battery4S4P <=> PcduHighPower
+	// SdrTransceiver: RF front end and antenna must operate in the same band
+	UhfFrontEnd <=> UhfTurnstileAntenna
+	// XBandTransmitter: link budget at 150 Mbps closes only with the horn
+	DvbS2Modulator => XBandHornAntenna
+	// HighResTelescope: TDI detector exceeds the Cassegrain image circle
+	MultispectralTdi => Korsch150
+	// ElectricPropulsion: thruster and propellant storage must match
+	GriddedIonThruster <=> XenonTank
+	IodineRfThruster <=> IodineTank
+	FeepThruster <=> IndiumReservoir
+	// ObcWithPayloadProcessor: GPU edge module needs a Linux host
+	GpuEdgeProcessor => ArmFlightProcessor
+
+	// ================= system-level budgets =================
+	// launch mass incl. 15 % system margin (root carries harness mass)
+	Structure3U => sum(massKg) * 1.15 <= 6.0
+	Structure6U => sum(massKg) * 1.15 <= 12.0
+	Structure12U => sum(massKg) * 1.15 <= 24.0
+	// internal volume (root carries harness volume)
+	Structure3U => sum(volumeU) <= 2.7
+	Structure6U => sum(volumeU) <= 5.4
+	Structure12U => sum(volumeU) <= 10.8
+	// orbit-average power: supply = array orbit-average x PCDU efficiency (root carries distribution losses)
+	CotsEpsKit3U => sum(powerW) <= 7.0
+	Eps6U_Standard => sum(powerW) <= 20.79
+	Eps12U_HighPower => sum(powerW) <= 57.96
+	BodyPanels3U & PcduCompact => sum(powerW) <= 5.94
+	BodyPanels3U & PcduHighPower => sum(powerW) <= 6.072
+	BodyPanels6U & PcduCompact => sum(powerW) <= 10.08
+	BodyPanels6U & PcduHighPower => sum(powerW) <= 10.304
+	BodyPanels12U & PcduCompact => sum(powerW) <= 16.83
+	BodyPanels12U & PcduHighPower => sum(powerW) <= 17.204
+	FixedWings2x3U & PcduCompact => sum(powerW) <= 20.79
+	FixedWings2x3U & PcduHighPower => sum(powerW) <= 21.252
+	TrackingWings2x6U & PcduHighPower => sum(powerW) <= 57.96
+	WingPanels2x3U & BurnWireHinges & PcduCompact => sum(powerW) <= 20.79
+	WingPanels2x3U & BurnWireHinges & PcduHighPower => sum(powerW) <= 21.252
+	WingPanels2x3U & SolarArrayDriveAssembly & PcduCompact => sum(powerW) <= 28.35
+	WingPanels2x3U & SolarArrayDriveAssembly & PcduHighPower => sum(powerW) <= 28.98
+	WingPanels2x6U & BurnWireHinges & PcduHighPower => sum(powerW) <= 42.504
+	WingPanels2x6U & SolarArrayDriveAssembly & PcduHighPower => sum(powerW) <= 57.96
+	// eclipse energy: 0.6 h eclipse, usable energy = capacity x allowed depth of discharge
+	CotsEpsKit3U | Battery2S2P => sum(powerW) * 0.6 <= 11.4
+	Eps6U_Standard | Battery2S4P => sum(powerW) * 0.6 <= 23.1
+	Eps12U_HighPower | Battery4S4P => sum(powerW) * 0.6 <= 46.2
+	// heat rejection
+	PassiveThermal | HeaterControlledThermal => sum(powerW) <= 25.0
+	DeployableRadiatorThermal => sum(powerW) <= 70.0
+
+	// ================= system-level compatibility =================
+	// solar array must fit the structure
+	CotsEpsKit3U | BodyPanels3U => Structure3U
+	BodyPanels6U => Structure6U
+	BodyPanels12U => Structure12U
+	WingPanels2x6U | TrackingWings2x6U | Eps12U_HighPower => !Structure3U
+	// stored momentum must grow with the form factor (2.5 mNms per U)
+	IntegratedAdcsUnit => !Structure12U
+	ReactionWheels3 => Structure3U
+	// payload pointing (star tracker below 0.5 deg; Korsch needs <= 0.065 deg)
+	HyperspectralImager | HighResTelescope | VhrTelescope_KorschTdi => StarTrackerSuite | StarTrackerSuite_Nano | FineAdcs
+	Korsch150 | VhrTelescope_KorschTdi => FineAdcs | ReactionWheels4Skewed | DualHeadStarTracker | (NanoStarTracker & FiberOpticGyro)
+	// X-band antennas need better than 3 deg pointing
+	XBandTransmitter | XBandTx_Qpsk | XBandTx_DvbS2Horn => !MagneticAdcs
+	// daily data volume (after on-board reduction) vs. daily downlink capacity (4 passes x 8 min)
+	WideFieldMultispectralCam & !payloadDownlink => SBandTransceiver | SBandFrontEnd
+	PanchromaticCmos => XBandTransmitter | XBandTx_Qpsk | XBandTx_DvbS2Horn | (GpuEdgeProcessor & SBandHighRateTx)
+	HyperspectralImager | MultispectralTdi | VhrTelescope_KorschTdi => DvbS2Modulator | XBandTx_DvbS2Horn | ((FpgaMassMemory | PayloadObc_LeonFpga | GpuEdgeProcessor) & (QpskModulator | XBandTx_Qpsk))
+	// on-board storage must hold one day of raw data
+	PanchromaticCmos => CotsArmObc | FpgaMassMemory | GpuEdgeProcessor | PayloadObc_LeonFpga
+	HyperspectralImager | MultispectralTdi | VhrTelescope_KorschTdi => FpgaMassMemory | GpuEdgeProcessor | PayloadObc_LeonFpga
+	// SpaceWire payload interface
+	HyperspectralImager | MultispectralTdi | VhrTelescope_KorschTdi => RadTolerantObc | LeonFlightProcessor | FpgaMassMemory | PayloadObc_LeonFpga
+	// detector thermal stability
+	HyperspectralImager | HighResTelescope => !PassiveThermal
+	Korsch150 | VhrTelescope_KorschTdi => DeployableRadiatorThermal
+	// very-low-orbit telescope: drag make-up impulse >= 250 m/s x spacecraft mass
+	Korsch150 | VhrTelescope_KorschTdi => propulsion & !ColdGasThruster
+	(Korsch150 | VhrTelescope_KorschTdi) & GriddedIonThruster => sum(massKg) * 250 <= 4118.793
+	(Korsch150 | VhrTelescope_KorschTdi) & IodineRfThruster => sum(massKg) * 250 <= 4658.15875
+	(Korsch150 | VhrTelescope_KorschTdi) & (FeepThruster | FeepModule) => sum(massKg) * 250 <= 7551.1205
+	// manoeuvres need on-board orbit determination and a three-axis ADCS
+	propulsion => gnss & !MagneticAdcs
+	// georeferencing of high-resolution imagery
+	HighResTelescope | VhrTelescope_KorschTdi => DualFrequencyGnss
